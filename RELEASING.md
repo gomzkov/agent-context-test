@@ -1,21 +1,19 @@
 # Releasing
 
-This project publishes `@gomzkov/agent-context-test` from GitHub Actions when a GitHub release is published.
+The first npm release is published locally because npm requires an existing package before trusted publishing can be configured. Later releases can use the manual GitHub Actions workflow.
 
 ## First release
 
-The npm package must exist before npm trusted publishing can be attached to it. For `0.1.0`:
+For `0.1.0`:
 
 1. Make the GitHub repository public and confirm CI passes on `main`.
-2. Create a short-lived granular npm token that can publish packages under `@gomzkov`.
-3. Add it to the GitHub repository as the `NPM_TOKEN` Actions secret.
-4. Create the `v0.1.0` tag from the verified commit and publish a GitHub release for it.
-5. Confirm the `Publish to npm` workflow succeeds and the package provenance links back to this repository.
-6. In the npm package settings, add a GitHub Actions trusted publisher for `gomzkov/agent-context-test` and workflow `publish.yml`, allowed to run `npm publish`.
-7. Delete the GitHub `NPM_TOKEN` secret and revoke the npm token.
-8. Enable npm's option to reject token-based publishing after the trusted publisher works.
+2. Run `npm login` and confirm the account with `npm whoami`.
+3. Run `npm publish --access public` and complete npm's 2FA prompt.
+4. Confirm the package page, provenance, install command, and `context-test --version`.
+5. In the npm package settings, add a [GitHub Actions trusted publisher](https://docs.npmjs.com/trusted-publishers/) for repository `gomzkov/agent-context-test` and workflow `publish.yml`.
+6. Publish the prepared `v0.1.0` GitHub release.
 
-The publish workflow uses OIDC when trusted publishing is configured. `NPM_TOKEN` is only the first-release fallback.
+The GitHub release does not trigger npm publishing. The publish workflow runs only when a maintainer starts it with a specific existing tag.
 
 ## Later releases
 
@@ -23,7 +21,9 @@ The publish workflow uses OIDC when trusted publishing is configured. `NPM_TOKEN
 2. Move the new entries in `CHANGELOG.md` under the release version.
 3. Run `npm test`, `npm pack --dry-run`, and `git diff --check`.
 4. Merge the release commit to `main` and wait for CI.
-5. Tag that exact commit as `v<version>` and publish the matching GitHub release.
-6. Confirm the npm workflow, package provenance, install command, and `context-test --version`.
+5. Tag that exact commit as `v<version>`.
+6. Run the `Publish to npm` workflow with that tag and confirm it succeeds.
+7. Publish the matching GitHub release.
+8. Confirm the package provenance, install command, and `context-test --version`.
 
-The workflow refuses to publish when the GitHub release tag and `package.json` version do not match.
+The workflow refuses to publish when the selected tag and `package.json` version do not match.

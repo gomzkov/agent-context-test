@@ -38,3 +38,13 @@ git diff --check
 ## Pull requests
 
 Keep a pull request focused on one behavior. Explain the real context problem it fixes, include the command or fixture that reproduced it, and note the vendor documentation used for discovery rules.
+
+Use a [Conventional Commit](https://www.conventionalcommits.org/) title for commits and pull requests:
+
+```text
+fix: keep project context visible
+feat: add support for another agent
+docs: explain contract discovery
+```
+
+Keep the title short, lowercase, and imperative. Use the commit or pull request body to explain why the change is needed and any behavior a user will notice.

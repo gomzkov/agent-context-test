@@ -1,14 +1,16 @@
 # Agent Context Test
 
-Test whether Codex and Claude can find the instructions and skills a task needs.
-
 [![CI](https://github.com/gomzkov/agent-context-test/actions/workflows/ci.yml/badge.svg)](https://github.com/gomzkov/agent-context-test/actions/workflows/ci.yml)
+
+Test whether Codex and Claude can find the instructions and skills a task needs.
 
 ```bash
 npx @gomzkov/agent-context-test
 ```
 
-The command reads your local agent configuration and compares what each supported agent can discover. It makes no model calls and does not upload your files.
+It reads local agent configuration, compares what each agent can discover, and makes no model calls or uploads.
+
+## See the mismatch
 
 ```text
 Agent Context Test
@@ -29,7 +31,7 @@ Project differences
   · surface AGENTS.md only in codex
 ```
 
-## What it catches
+It catches:
 
 - An instruction file that one agent loads and another misses
 - A nested override or fallback file that changes the effective Codex instructions
@@ -38,7 +40,7 @@ Project differences
 - Task guidance that is missing from the context a supported agent can discover
 - Private or irrelevant context that a task should not receive
 
-Without a contract, the report shows project context and cross-agent differences. User-wide instructions and skills are summarized so they do not bury the project result. Use `--scope all` when you want the full environment comparison.
+Without a contract, the report puts project context first and summarizes user-wide context. Use `--scope all` for the complete environment comparison.
 
 ## Test the context for a task
 
@@ -70,11 +72,9 @@ Run the same command again:
 npx @gomzkov/agent-context-test
 ```
 
-Each assertion gets a `PASS`, `FAIL`, or `UNKNOWN` result for every target. Failed checks explain what is missing and suggest a safe place to fix it. `UNKNOWN` means the static inspector found conditional context or could not inspect enough evidence to make a trustworthy claim.
+Each assertion gets `PASS`, `FAIL`, or `UNKNOWN` for every target. A failed check explains what is missing and where to fix it. `UNKNOWN` means the available static evidence is conditional or incomplete.
 
-The tool finds the nearest `.context-tests.yml` between the current directory and the Git root. You can also pass a different file with `--contract`.
-
-`contains` checks are case-sensitive after whitespace and line-ending normalization. `source` supports `*`, `**`, and `?` globs relative to the Git root. Unknown contract keys fail the run, so typos do not silently skip a check. The optional first comment enables completion and validation in editors that support YAML language-server schemas.
+The tool finds the nearest `.context-tests.yml` up to the Git root. Pass another file with `--contract`. The optional schema comment enables validation and completion in compatible editors.
 
 ## Use it in CI
 
@@ -90,24 +90,18 @@ Exit codes:
 - `1`: one or more assertions failed
 - `2`: the request or contract was invalid, so no trustworthy report was produced
 
-## CLI
+## Useful options
 
 ```text
-context-test [directory] [options]
-
-Options:
-  --contract <path>                  Use a context contract
-  --target <codex|claude>            Inspect one target; repeatable
-  --scope <project|user|all>         Detail scope for terminal/Markdown (default: project)
-  --format <terminal|markdown|json>  Output format
-  --output <path>                    Write the report to a file
-  --home <path>                      Override the home directory (tests/CI)
-  --no-color                         Disable terminal colors
-  -h, --help                         Show help
-  -v, --version                      Show version
+context-test [directory]
+  --contract <path>
+  --target <codex|claude>
+  --scope <project|user|all>
+  --format <terminal|markdown|json>
+  --output <path>
 ```
 
-`--scope` controls terminal and Markdown detail. JSON always contains the complete discovered evidence so scripts do not lose data.
+Run `context-test --help` for the full reference. JSON always contains the complete discovered evidence.
 
 ## Supported context
 
@@ -123,9 +117,9 @@ The adapters follow the documented local discovery behavior for [Codex instructi
 
 ## Limits and privacy
 
-This is static inspection. Runtime flags, hooks, plugins, MCP responses, prompts, added directories, and hidden system instructions can add context the tool cannot see. A static `PASS` means supported local surfaces contain the expected evidence. It does not guarantee that a model will follow an instruction.
+This is static inspection. Runtime flags, hooks, plugins, MCP responses, prompts, and hidden instructions can add context the tool cannot see. A static `PASS` means supported local surfaces contain the expected evidence. It does not guarantee that a model will follow an instruction.
 
-Inspection does not execute agent files, call an AI model, send telemetry, or change agent configuration. The tool writes only when you explicitly use `--output`. Reports contain paths, fingerprints, and text you placed in the contract, not arbitrary instruction contents. Review Markdown or JSON reports before sharing them because paths and assertion text can still be private.
+The tool does not execute agent files, send telemetry, or change agent configuration. It writes only with `--output`. Reports omit arbitrary instruction contents, but paths and contract text can still be private. Review reports before sharing them.
 
 Version `0.x` supports Codex and Claude Code. The contract and JSON report schemas may change before `1.0`.
 
@@ -136,6 +130,6 @@ npm install
 npm test
 ```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a pull request. Security reports belong in [GitHub private vulnerability reporting](https://github.com/gomzkov/agent-context-test/security/advisories/new), not a public issue.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a pull request. Report security issues through [GitHub private vulnerability reporting](https://github.com/gomzkov/agent-context-test/security/advisories/new).
 
 MIT
