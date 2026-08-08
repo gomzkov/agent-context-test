@@ -1,0 +1,53 @@
+{
+  "name": "@gomzkov/context-doctor",
+  "version": "0.1.0",
+  "description": "See which instructions and skills Codex and Claude can actually discover.",
+  "type": "module",
+  "bin": {
+    "context-doctor": "bin/context-doctor.js"
+  },
+  "files": [
+    "bin",
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "prepack": "npm test"
+  },
+  "keywords": [
+    "ai-agents",
+    "codex",
+    "claude-code",
+    "agents-md",
+    "context",
+    "developer-tools",
+    "cli"
+  ],
+  "author": "Evgeni Gomziakov (gomzkov)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gomzkov/context-doctor.git"
+  },
+  "homepage": "https://github.com/gomzkov/context-doctor#readme",
+  "bugs": {
+    "url": "https://github.com/gomzkov/context-doctor/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
+  }
+}

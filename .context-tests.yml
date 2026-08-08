@@ -1,0 +1,12 @@
+version: 1
+task: maintain-context-doctor
+targets: [codex, claude]
+
+assertions:
+  - id: run-tests
+    expect: available
+    contains: "Run `npm test` after changing TypeScript files."
+
+  - id: honest-language
+    expect: available
+    contains: "Describe static evidence as discoverable context, not proof of model behavior."
