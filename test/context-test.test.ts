@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { ContextDoctor } from "../src/doctor.js";
+import { ContextTestRunner } from "../src/runner.js";
 
 function write(filePath: string, content: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -13,7 +13,7 @@ function write(filePath: string, content: string): void {
 }
 
 function fixture(t: test.TestContext): { root: string; home: string } {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), "context-doctor-"));
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "agent-context-test-"));
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
   const root = path.join(base, "project");
   const home = path.join(base, "home");
@@ -36,7 +36,7 @@ test("models Codex instruction precedence and fallback behavior", async (t) => {
   write(path.join(nested, "AGENTS.override.md"), "Nested override\n");
   write(path.join(nested, "AGENTS.md"), "Shadowed nested instruction\n");
 
-  const result = await new ContextDoctor().diagnose({
+  const result = await new ContextTestRunner().diagnose({
     projectRoot: nested,
     homeDirectory: home,
     environment: {},
@@ -81,7 +81,7 @@ test("models Claude instructions, imports, rules, memory, and skills", async (t)
     "---\nname: review\ndescription: Review changes\n---\nReview the diff.\n",
   );
 
-  const result = await new ContextDoctor().diagnose({
+  const result = await new ContextTestRunner().diagnose({
     projectRoot: root,
     homeDirectory: home,
     environment: {},
@@ -132,7 +132,7 @@ assertions:
 `,
   );
 
-  const result = await new ContextDoctor().diagnose({
+  const result = await new ContextTestRunner().diagnose({
     projectRoot: root,
     homeDirectory: home,
     environment: {},
@@ -167,7 +167,7 @@ assertions:
   const cliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../src/cli.js");
   const result = spawnSync(
     process.execPath,
-    [cliPath, "doctor", root, "--home", home, "--format", "json", "--no-color"],
+    [cliPath, root, "--home", home, "--format", "json", "--no-color"],
     { encoding: "utf8" },
   );
   assert.equal(result.status, 1, result.stderr);
@@ -182,7 +182,7 @@ test("invalid contracts fail without producing a report", async (t) => {
     path.join(root, ".context-tests.yml"),
     "version: 1\nassertions:\n  - id: broken\n    expect: available\n    contains: value\n    typo: true\n",
   );
-  const result = await new ContextDoctor().diagnose({
+  const result = await new ContextTestRunner().diagnose({
     projectRoot: root,
     homeDirectory: home,
     environment: {},
@@ -207,7 +207,7 @@ assertions:
     contains: "Use strict TypeScript"
 `,
   );
-  const result = await new ContextDoctor().diagnose({
+  const result = await new ContextTestRunner().diagnose({
     projectRoot: root,
     homeDirectory: home,
     environment: {},
@@ -225,7 +225,7 @@ test("Codex respects active byte limits and ignores commented config examples", 
     "# project_doc_max_bytes = 1\nproject_doc_max_bytes = 12\n",
   );
   write(path.join(root, "AGENTS.md"), "This instruction is longer than twelve bytes.\n");
-  const result = await new ContextDoctor().diagnose({
+  const result = await new ContextTestRunner().diagnose({
     projectRoot: root,
     homeDirectory: home,
     environment: {},
@@ -249,7 +249,6 @@ test("CLI writes a Markdown report without terminal escapes", (t) => {
     process.execPath,
     [
       cliPath,
-      "doctor",
       root,
       "--home",
       home,
@@ -262,6 +261,86 @@ test("CLI writes a Markdown report without terminal escapes", (t) => {
   );
   assert.equal(result.status, 0, result.stderr);
   const report = fs.readFileSync(outputPath, "utf8");
-  assert.match(report, /^# Context Doctor report/);
+  assert.match(report, /^# Agent Context Test report/);
   assert.equal(report.includes("\x1b["), false);
+});
+
+test("terminal keeps project differences visible when user skill inventories drift", (t) => {
+  const { root, home } = fixture(t);
+  write(path.join(root, "AGENTS.md"), "Project-only guidance.\n");
+  for (let index = 0; index < 25; index++) {
+    const name = `global-${String(index).padStart(2, "0")}`;
+    write(
+      path.join(home, ".agents", "skills", name, "SKILL.md"),
+      `---\nname: ${name}\ndescription: Global test skill\n---\n`,
+    );
+  }
+
+  const cliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../src/cli.js");
+  const result = spawnSync(
+    process.execPath,
+    [cliPath, root, "--home", home, "--no-color"],
+    { encoding: "utf8" },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Project differences[\s\S]*surface AGENTS\.md only in codex/);
+  assert.doesNotMatch(result.stdout, /skill global-00 only in codex/);
+  assert.match(result.stdout, /25 user skill differences hidden/);
+
+  const allScopes = spawnSync(
+    process.execPath,
+    [cliPath, root, "--home", home, "--scope", "all", "--no-color"],
+    { encoding: "utf8" },
+  );
+  assert.equal(allScopes.status, 0, allScopes.stderr);
+  assert.match(allScopes.stdout, /Project differences[\s\S]*surface AGENTS\.md only in codex/);
+  assert.match(allScopes.stdout, /User differences[\s\S]*skill global-00 only in codex/);
+  assert.ok(
+    allScopes.stdout.indexOf("Project differences") < allScopes.stdout.indexOf("User differences"),
+  );
+});
+
+test("CLI rejects an unknown report scope with exit code 2", (t) => {
+  const { root, home } = fixture(t);
+  const cliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../src/cli.js");
+  const result = spawnSync(
+    process.execPath,
+    [cliPath, root, "--home", home, "--scope", "workspace"],
+    { encoding: "utf8" },
+  );
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /unsupported scope workspace/);
+  assert.equal(result.stdout, "");
+});
+
+test("automatically finds the nearest context contract from a nested directory", async (t) => {
+  const { root, home } = fixture(t);
+  const nested = path.join(root, "packages", "web", "src");
+  fs.mkdirSync(nested, { recursive: true });
+  write(path.join(root, "AGENTS.md"), "Run the full test suite.\n");
+  write(
+    path.join(root, ".context-tests.yml"),
+    `version: 1
+task: nested-task
+targets: [codex]
+assertions:
+  - id: tests
+    expect: available
+    contains: "Run the full test suite"
+`,
+  );
+
+  const result = await new ContextTestRunner().diagnose({
+    projectRoot: nested,
+    homeDirectory: home,
+    environment: {},
+  });
+
+  assert.equal(result.kind, "report");
+  if (result.kind !== "report") return;
+  assert.equal(result.report.task, "nested-task");
+  assert.equal(result.report.traces[0]?.status, "PASS");
+  assert.equal(result.report.contractPath, path.join(root, ".context-tests.yml"));
 });

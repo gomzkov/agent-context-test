@@ -28,6 +28,6 @@ _Avoid_: Context test
 A report connecting a context assertion to its static evidence and any uncertainty.
 _Avoid_: Log, chain of thought
 
-**Context doctor**:
+**Agent context test**:
 A tool that compares context contracts and statically discoverable agent context to explain missing, different, shadowed, or overexposed instructions.
 _Avoid_: Memory layer, context compiler

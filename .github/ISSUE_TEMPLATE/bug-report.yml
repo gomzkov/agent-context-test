@@ -1,0 +1,49 @@
+name: Bug report
+description: Report incorrect discovery, output, or CLI behavior.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not paste secrets or private instruction contents. A small synthetic fixture is best.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: context-test --version
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: macOS 15, Node 24, Codex or Claude Code version if relevant
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: fixture
+    attributes:
+      label: Minimal file layout and contents
+      description: Replace private paths and text with a small synthetic example that still reproduces the problem.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true

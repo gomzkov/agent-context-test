@@ -1,5 +1,6 @@
+# yaml-language-server: $schema=./schema/context-tests.v1.schema.json
 version: 1
-task: maintain-context-doctor
+task: maintain-agent-context-test
 targets: [codex, claude]
 
 assertions:

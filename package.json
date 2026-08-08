@@ -1,14 +1,15 @@
 {
-  "name": "@gomzkov/context-doctor",
+  "name": "@gomzkov/agent-context-test",
   "version": "0.1.0",
-  "description": "See which instructions and skills Codex and Claude can actually discover.",
+  "description": "Test whether Codex and Claude can find the instructions and skills a task needs.",
   "type": "module",
   "bin": {
-    "context-doctor": "bin/context-doctor.js"
+    "context-test": "bin/context-test.js"
   },
   "files": [
     "bin",
     "dist/src",
+    "schema",
     "README.md",
     "LICENSE"
   ],
@@ -23,7 +24,9 @@
     "codex",
     "claude-code",
     "agents-md",
+    "agent-context",
     "context",
+    "testing",
     "developer-tools",
     "cli"
   ],
@@ -31,11 +34,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gomzkov/context-doctor.git"
+    "url": "git+https://github.com/gomzkov/agent-context-test.git"
   },
-  "homepage": "https://github.com/gomzkov/context-doctor#readme",
+  "homepage": "https://github.com/gomzkov/agent-context-test#readme",
   "bugs": {
-    "url": "https://github.com/gomzkov/context-doctor/issues"
+    "url": "https://github.com/gomzkov/agent-context-test/issues"
   },
   "publishConfig": {
     "access": "public"

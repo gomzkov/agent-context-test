@@ -1,4 +1,13 @@
-import type { AgentId, ContextTrace, Diagnosis, OutputFormat } from "./types.js";
+import { buildDifferences, evidenceInScope } from "./differences.js";
+import type {
+  AgentId,
+  ContextScope,
+  ContextTrace,
+  CrossAgentDifference,
+  Diagnosis,
+  OutputFormat,
+  TargetInspection,
+} from "./types.js";
 
 interface Colors {
   bold: string;
@@ -8,6 +17,11 @@ interface Colors {
   yellow: string;
   cyan: string;
   reset: string;
+}
+
+interface RenderOptions {
+  color?: boolean;
+  scope?: ContextScope;
 }
 
 function colors(enabled: boolean): Colors {
@@ -33,37 +47,127 @@ function targetTrace(report: Diagnosis, assertionId: string, target: AgentId): C
   return report.traces.find((trace) => trace.assertionId === assertionId && trace.target === target);
 }
 
-function terminal(report: Diagnosis, useColor: boolean): string {
-  const color = colors(useColor);
-  const out: string[] = [];
-  const targets = report.targets.map((target) => target.target);
-  out.push(`${color.bold}Context Doctor${color.reset}`);
-  out.push(`${color.dim}${report.projectRoot}${color.reset}`);
-  if (report.task) out.push(`${color.dim}Task: ${report.task}${color.reset}`);
-  out.push("");
+function title(scope: Exclude<ContextScope, "all">): "Project" | "User" {
+  return scope === "project" ? "Project" : "User";
+}
 
-  const labelWidth = 28;
+function scopedSurfaceCount(target: TargetInspection, scope: ContextScope): number {
+  return target.surfaces.filter(
+    (surface) => surface.disposition === "applied" && evidenceInScope(surface.scope, scope),
+  ).length;
+}
+
+function scopedSkillCount(target: TargetInspection, scope: ContextScope): number {
+  return target.skills.filter(
+    (skill) => skill.disposition === "available" && evidenceInScope(skill.scope, scope),
+  ).length;
+}
+
+function terminalMetrics(
+  out: string[],
+  report: Diagnosis,
+  targets: readonly AgentId[],
+  scope: ContextScope,
+): void {
+  const labelWidth = 32;
   out.push(`${"".padEnd(labelWidth)}${targets.map((target) => target.padStart(10)).join("")}`);
   const metric = (label: string, values: readonly number[]): void => {
     out.push(`${label.padEnd(labelWidth)}${values.map((value) => String(value).padStart(10)).join("")}`);
   };
-  metric(
-    "Applied context surfaces",
-    report.targets.map((target) => target.surfaces.filter((surface) => surface.disposition === "applied").length),
-  );
-  metric(
-    "Available skills",
-    report.targets.map((target) => target.skills.filter((skill) => skill.disposition === "available").length),
-  );
+  const addScope = (view: Exclude<ContextScope, "all">): void => {
+    metric(
+      `Applied ${view} surfaces`,
+      report.targets.map((target) => scopedSurfaceCount(target, view)),
+    );
+    metric(
+      `Available ${view} skills`,
+      report.targets.map((target) => scopedSkillCount(target, view)),
+    );
+  };
+  if (scope === "all") {
+    addScope("project");
+    addScope("user");
+  } else addScope(scope);
   metric(
     "Warnings",
     report.targets.map(
       (target) => target.findings.filter((finding) => finding.severity === "warning").length,
     ),
   );
+}
+
+function pushTerminalSources(
+  out: string[],
+  report: Diagnosis,
+  scope: Exclude<ContextScope, "all">,
+  color: Colors,
+): void {
+  out.push(`${color.bold}${title(scope)} sources${color.reset}`);
+  for (const target of report.targets) {
+    out.push(`  ${color.bold}${target.target}${color.reset}${target.completeness === "partial" ? ` ${color.yellow}(partial)${color.reset}` : ""}`);
+    const visible = target.surfaces.filter(
+      (surface) =>
+        evidenceInScope(surface.scope, scope) &&
+        (surface.disposition !== "ignored" || (surface.bytes ?? 0) > 0),
+    );
+    if (!visible.length) out.push(`    ${color.dim}no supported ${scope} context found${color.reset}`);
+    for (const surface of visible) {
+      const mark = surface.disposition === "applied" ? color.green + "✓" : surface.disposition === "unreadable" ? color.red + "!" : color.yellow + "·";
+      out.push(`    ${mark}${color.reset} ${surface.path} ${color.dim}${surface.disposition} · ${surface.kind}${color.reset}`);
+    }
+  }
+  out.push("");
+}
+
+function pushTerminalDifferences(
+  out: string[],
+  report: Diagnosis,
+  scope: Exclude<ContextScope, "all">,
+  color: Colors,
+): void {
+  const differences = buildDifferences(report.targets, scope);
+  if (!differences.length) return;
+  out.push(`${color.bold}${title(scope)} differences${color.reset}`);
+  for (const difference of differences.slice(0, 20)) {
+    out.push(
+      `  ${color.cyan}·${color.reset} ${difference.kind} ${difference.item} ${color.dim}only in ${difference.presentIn.join(", ")}${color.reset}`,
+    );
+  }
+  if (differences.length > 20) {
+    out.push(`  ${color.dim}… ${differences.length - 20} more in JSON/Markdown output${color.reset}`);
+  }
+  out.push("");
+}
+
+function plural(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? "" : "s"}`;
+}
+
+function hiddenUserDifferences(report: Diagnosis): string | undefined {
+  const differences = buildDifferences(report.targets, "user");
+  const surfaces = differences.filter((difference) => difference.kind === "surface").length;
+  const skills = differences.filter((difference) => difference.kind === "skill").length;
+  const parts: string[] = [];
+  if (surfaces) parts.push(`${plural(surfaces, "user surface difference")} hidden`);
+  if (skills) parts.push(`${plural(skills, "user skill difference")} hidden`);
+  if (!parts.length) return undefined;
+  return `${parts.join(", ")}; use --scope all to show them.`;
+}
+
+function terminal(report: Diagnosis, useColor: boolean, scope: ContextScope): string {
+  const color = colors(useColor);
+  const out: string[] = [];
+  const targets = report.targets.map((target) => target.target);
+  out.push(`${color.bold}Agent Context Test${color.reset}`);
+  out.push(`${color.dim}${report.projectRoot}${color.reset}`);
+  if (report.task) out.push(`${color.dim}Task: ${report.task}${color.reset}`);
+  out.push("");
+
+  terminalMetrics(out, report, targets, scope);
   out.push("");
 
   if (report.traces.length) {
+    const labelWidth = 32;
     out.push(`${color.bold}Contract${color.reset}`);
     const assertionIds = [...new Set(report.traces.map((trace) => trace.assertionId))];
     for (const assertionId of assertionIds) {
@@ -85,31 +189,15 @@ function terminal(report: Diagnosis, useColor: boolean): string {
     if (report.traces.some((trace) => trace.status !== "PASS")) out.push("");
   }
 
-  out.push(`${color.bold}Sources${color.reset}`);
-  for (const target of report.targets) {
-    out.push(`  ${color.bold}${target.target}${color.reset}${target.completeness === "partial" ? ` ${color.yellow}(partial)${color.reset}` : ""}`);
-    const visible = target.surfaces.filter(
-      (surface) => surface.disposition !== "ignored" || (surface.bytes ?? 0) > 0,
-    );
-    if (!visible.length) out.push(`    ${color.dim}no supported context files found${color.reset}`);
-    for (const surface of visible) {
-      const mark = surface.disposition === "applied" ? color.green + "✓" : surface.disposition === "unreadable" ? color.red + "!" : color.yellow + "·";
-      out.push(`    ${mark}${color.reset} ${surface.path} ${color.dim}${surface.disposition} · ${surface.kind}${color.reset}`);
-    }
+  const scopes: readonly Exclude<ContextScope, "all">[] = scope === "all" ? ["project", "user"] : [scope];
+  for (const view of scopes) {
+    pushTerminalSources(out, report, view, color);
+    pushTerminalDifferences(out, report, view, color);
   }
-  out.push("");
 
-  if (report.differences.length) {
-    out.push(`${color.bold}Differences${color.reset}`);
-    for (const difference of report.differences.slice(0, 20)) {
-      out.push(
-        `  ${color.cyan}·${color.reset} ${difference.kind} ${difference.item} ${color.dim}only in ${difference.presentIn.join(", ")}${color.reset}`,
-      );
-    }
-    if (report.differences.length > 20) {
-      out.push(`  ${color.dim}… ${report.differences.length - 20} more in JSON/Markdown output${color.reset}`);
-    }
-    out.push("");
+  if (scope === "project") {
+    const hidden = hiddenUserDifferences(report);
+    if (hidden) out.push(`${color.dim}${hidden}${color.reset}`, "");
   }
 
   const warnings = report.findings.filter((finding) => finding.severity === "warning");
@@ -125,16 +213,66 @@ function terminal(report: Diagnosis, useColor: boolean): string {
   return out.join("\n");
 }
 
-function markdown(report: Diagnosis): string {
-  const out: string[] = ["# Context Doctor report", "", `Project: \`${report.projectRoot}\``];
-  if (report.task) out.push(`Task: ${report.task}`);
-  out.push("");
-  out.push("## Summary", "");
-  out.push("| Target | Applied surfaces | Available skills | Warnings |", "| --- | ---: | ---: | ---: |");
+function pushMarkdownSources(
+  out: string[],
+  report: Diagnosis,
+  scope: Exclude<ContextScope, "all">,
+): void {
+  out.push(`## ${title(scope)} sources`, "");
   for (const target of report.targets) {
-    out.push(
-      `| ${target.target} | ${target.surfaces.filter((surface) => surface.disposition === "applied").length} | ${target.skills.filter((skill) => skill.disposition === "available").length} | ${target.findings.filter((finding) => finding.severity === "warning").length} |`,
+    out.push(`### ${target.target}${target.completeness === "partial" ? " (partial)" : ""}`, "");
+    const visible = target.surfaces.filter(
+      (surface) =>
+        evidenceInScope(surface.scope, scope) &&
+        (surface.disposition !== "ignored" || (surface.bytes ?? 0) > 0),
     );
+    if (!visible.length) out.push(`No supported ${scope} context found.`, "");
+    else {
+      for (const surface of visible) out.push(`- \`${surface.path}\` — ${surface.disposition}, ${surface.kind}`);
+      out.push("");
+    }
+  }
+}
+
+function pushMarkdownDifferences(
+  out: string[],
+  report: Diagnosis,
+  scope: Exclude<ContextScope, "all">,
+): void {
+  const differences = buildDifferences(report.targets, scope);
+  if (!differences.length) return;
+  out.push(`## ${title(scope)} differences`, "");
+  for (const difference of differences) {
+    out.push(`- ${difference.kind} \`${difference.item}\` is available only to ${difference.presentIn.join(", ")}.`);
+  }
+  out.push("");
+}
+
+function markdown(report: Diagnosis, scope: ContextScope): string {
+  const out: string[] = ["# Agent Context Test report", "", `Project: \`${report.projectRoot}\``];
+  if (report.task) out.push(`Task: ${report.task}`);
+  out.push("", "## Summary", "");
+
+  if (scope === "all") {
+    out.push(
+      "| Target | Project surfaces | Project skills | User surfaces | User skills | Warnings |",
+      "| --- | ---: | ---: | ---: | ---: | ---: |",
+    );
+    for (const target of report.targets) {
+      out.push(
+        `| ${target.target} | ${scopedSurfaceCount(target, "project")} | ${scopedSkillCount(target, "project")} | ${scopedSurfaceCount(target, "user")} | ${scopedSkillCount(target, "user")} | ${target.findings.filter((finding) => finding.severity === "warning").length} |`,
+      );
+    }
+  } else {
+    out.push(
+      `| Target | Applied ${scope} surfaces | Available ${scope} skills | Warnings |`,
+      "| --- | ---: | ---: | ---: |",
+    );
+    for (const target of report.targets) {
+      out.push(
+        `| ${target.target} | ${scopedSurfaceCount(target, scope)} | ${scopedSkillCount(target, scope)} | ${target.findings.filter((finding) => finding.severity === "warning").length} |`,
+      );
+    }
   }
 
   if (report.traces.length) {
@@ -157,25 +295,15 @@ function markdown(report: Diagnosis): string {
     }
   }
 
-  out.push("", "## Sources", "");
-  for (const target of report.targets) {
-    out.push(`### ${target.target}${target.completeness === "partial" ? " (partial)" : ""}`, "");
-    const visible = target.surfaces.filter(
-      (surface) => surface.disposition !== "ignored" || (surface.bytes ?? 0) > 0,
-    );
-    if (!visible.length) out.push("No supported context files found.", "");
-    else {
-      for (const surface of visible) out.push(`- \`${surface.path}\` — ${surface.disposition}, ${surface.kind}`);
-      out.push("");
-    }
-  }
-
-  if (report.differences.length) {
-    out.push("## Differences", "");
-    for (const difference of report.differences) {
-      out.push(`- ${difference.kind} \`${difference.item}\` is available only to ${difference.presentIn.join(", ")}.`);
-    }
+  const scopes: readonly Exclude<ContextScope, "all">[] = scope === "all" ? ["project", "user"] : [scope];
+  for (const view of scopes) {
     out.push("");
+    pushMarkdownSources(out, report, view);
+    pushMarkdownDifferences(out, report, view);
+  }
+  if (scope === "project") {
+    const hidden = hiddenUserDifferences(report);
+    if (hidden) out.push(`> ${hidden}`, "");
   }
 
   const warnings = report.findings.filter((finding) => finding.severity === "warning");
@@ -193,11 +321,12 @@ function markdown(report: Diagnosis): string {
 export function renderDiagnosis(
   report: Diagnosis,
   format: OutputFormat,
-  options: { color?: boolean } = {},
+  options: RenderOptions = {},
 ): string {
   if (format === "json") return JSON.stringify(report, null, 2) + "\n";
-  if (format === "markdown") return markdown(report) + "\n";
-  return terminal(report, options.color ?? false) + "\n";
+  const scope = options.scope ?? "project";
+  if (format === "markdown") return markdown(report, scope) + "\n";
+  return terminal(report, options.color ?? false, scope) + "\n";
 }
 
 export function suggestedExitCode(report: Diagnosis): 0 | 1 {

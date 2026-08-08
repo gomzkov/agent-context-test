@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../schema/context-tests.v1.schema.json
+version: 1
+task: public-copy
+targets: [codex, claude]
+
+assertions:
+  - id: direct-writing
+    expect: available
+    contains: "Use plain, direct English"
+
+  - id: writing-skill
+    expect: skill
+    name: say-it-normally
+
+  - id: private-notes
+    expect: unavailable
+    source: "personal/**"

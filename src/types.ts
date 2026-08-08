@@ -1,5 +1,6 @@
 export type AgentId = "codex" | "claude";
 export type OutputFormat = "terminal" | "markdown" | "json";
+export type ContextScope = "project" | "user" | "all";
 export type AssertionStatus = "PASS" | "FAIL" | "UNKNOWN";
 export type InspectionCompleteness = "complete" | "partial";
 export type SurfaceKind = "instruction" | "rule" | "memory" | "import";
@@ -115,7 +116,7 @@ export interface Diagnosis {
   };
 }
 
-export interface DoctorRequest {
+export interface ContextTestRequest {
   projectRoot: string;
   homeDirectory: string;
   environment: Readonly<Record<string, string | undefined>>;
@@ -123,20 +124,19 @@ export interface DoctorRequest {
   targets?: readonly AgentId[];
 }
 
-export type DoctorErrorCode =
+export type ContextTestErrorCode =
   | "ROOT_NOT_FOUND"
   | "ROOT_NOT_DIRECTORY"
   | "CONTRACT_NOT_FOUND"
   | "CONTRACT_INVALID"
   | "TARGET_UNKNOWN";
 
-export interface DoctorError {
-  code: DoctorErrorCode;
+export interface ContextTestError {
+  code: ContextTestErrorCode;
   message: string;
   path?: string;
 }
 
 export type DiagnoseResult =
   | { kind: "report"; report: Diagnosis }
-  | { kind: "error"; error: DoctorError };
-
+  | { kind: "error"; error: ContextTestError };

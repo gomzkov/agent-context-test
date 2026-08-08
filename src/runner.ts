@@ -4,15 +4,15 @@ import { ClaudeContextAdapter } from "./adapters/claude.js";
 import { CodexContextAdapter } from "./adapters/codex.js";
 import type { ContextHostAdapter, HostInspection, InternalSurface } from "./adapters/types.js";
 import { loadContract } from "./contract.js";
+import { buildDifferences } from "./differences.js";
 import { findNormalizedLine, globMatches, isDirectory } from "./files.js";
 import type {
   AgentId,
   ContextAssertion,
+  ContextTestRequest,
   ContextTrace,
-  CrossAgentDifference,
   DiagnoseResult,
   Diagnosis,
-  DoctorRequest,
   SkillEvidence,
   StaticEvidence,
   StaticFinding,
@@ -203,53 +203,6 @@ function evaluateAssertion(assertion: ContextAssertion, inspection: HostInspecti
   };
 }
 
-function buildDifferences(inspections: readonly HostInspection[]): CrossAgentDifference[] {
-  if (inspections.length < 2) return [];
-  const differences: CrossAgentDifference[] = [];
-  const targets = inspections.map((inspection) => inspection.target);
-
-  const fingerprints = new Map<string, Array<{ target: AgentId; path: string }>>();
-  for (const inspection of inspections) {
-    for (const surface of inspection.surfaces) {
-      if (surface.disposition !== "applied" || !surface.fingerprint) continue;
-      const entries = fingerprints.get(surface.fingerprint) ?? [];
-      entries.push({ target: inspection.target, path: surface.displayPath });
-      fingerprints.set(surface.fingerprint, entries);
-    }
-  }
-  for (const entries of fingerprints.values()) {
-    const presentIn = [...new Set(entries.map((entry) => entry.target))];
-    const missingFrom = targets.filter((target) => !presentIn.includes(target));
-    if (!missingFrom.length) continue;
-    differences.push({
-      kind: "surface",
-      item: entries[0]!.path,
-      presentIn,
-      missingFrom,
-    });
-  }
-
-  const skillNames = new Set(
-    inspections.flatMap((inspection) =>
-      inspection.skills
-        .filter((skill) => skill.disposition === "available")
-        .map((skill) => skill.name),
-    ),
-  );
-  for (const name of [...skillNames].sort()) {
-    const presentIn = inspections
-      .filter((inspection) =>
-        inspection.skills.some((skill) => skill.name === name && skill.disposition === "available"),
-      )
-      .map((inspection) => inspection.target);
-    const missingFrom = targets.filter((target) => !presentIn.includes(target));
-    if (missingFrom.length) differences.push({ kind: "skill", item: name, presentIn, missingFrom });
-  }
-  return differences.sort(
-    (left, right) => left.kind.localeCompare(right.kind) || left.item.localeCompare(right.item),
-  );
-}
-
 function publicInspection(inspection: HostInspection): TargetInspection {
   return {
     target: inspection.target,
@@ -260,13 +213,13 @@ function publicInspection(inspection: HostInspection): TargetInspection {
   };
 }
 
-export class ContextDoctor {
+export class ContextTestRunner {
   readonly #adapters = new Map<AgentId, ContextHostAdapter>([
     ["codex", new CodexContextAdapter()],
     ["claude", new ClaudeContextAdapter()],
   ]);
 
-  async diagnose(request: DoctorRequest): Promise<DiagnoseResult> {
+  async diagnose(request: ContextTestRequest): Promise<DiagnoseResult> {
     const root = path.resolve(request.projectRoot);
     if (!fs.existsSync(root)) {
       return {
@@ -311,14 +264,15 @@ export class ContextDoctor {
         )
       : [];
     const findings: StaticFinding[] = inspections.flatMap((inspection) => inspection.findings);
+    const publicTargets = inspections.map(publicInspection);
     const report: Diagnosis = {
       schemaVersion: 1,
       projectRoot: root,
       ...(contract?.task === undefined ? {} : { task: contract.task }),
       ...(contractResult.kind === "contract" ? { contractPath: contractResult.path } : {}),
-      targets: inspections.map(publicInspection),
+      targets: publicTargets,
       traces,
-      differences: buildDifferences(inspections),
+      differences: buildDifferences(publicTargets),
       findings,
       summary: {
         pass: traces.filter((trace) => trace.status === "PASS").length,

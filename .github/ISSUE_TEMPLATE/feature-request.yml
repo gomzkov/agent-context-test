@@ -1,0 +1,36 @@
+name: Feature request
+description: Propose a context surface, assertion, or report improvement.
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the task that is hard today and what the tool fails to show.
+    validations:
+      required: true
+  - type: dropdown
+    id: target
+    attributes:
+      label: Agent
+      options:
+        - Codex
+        - Claude Code
+        - Another coding agent
+        - Cross-agent reporting
+        - Context contracts
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Small example
+      description: Show the files, command, and result you would expect.
+    validations:
+      required: true
+  - type: input
+    id: docs
+    attributes:
+      label: Primary documentation
+      description: Link the agent vendor's documentation when the request depends on discovery behavior.

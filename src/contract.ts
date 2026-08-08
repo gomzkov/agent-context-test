@@ -1,17 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "yaml";
+import { findGitRoot } from "./files.js";
 import type {
   AgentId,
   ContextAssertion,
   ContextContract,
-  DoctorError,
+  ContextTestError,
 } from "./types.js";
 
 export type ContractLoadResult =
   | { kind: "none" }
   | { kind: "contract"; contract: ContextContract; path: string }
-  | { kind: "error"; error: DoctorError };
+  | { kind: "error"; error: ContextTestError };
 
 const CONTRACT_KEYS = new Set(["version", "task", "targets", "assertions"]);
 const ASSERTION_BASE_KEYS = new Set(["id", "expect"]);
@@ -128,9 +129,24 @@ export function loadContract(
   projectRoot: string,
   explicitPath?: string,
 ): ContractLoadResult {
-  const resolved = explicitPath
-    ? path.resolve(projectRoot, explicitPath)
-    : path.join(projectRoot, ".context-tests.yml");
+  let resolved: string;
+  if (explicitPath) resolved = path.resolve(projectRoot, explicitPath);
+  else {
+    const start = path.resolve(projectRoot);
+    const boundary = findGitRoot(start) ?? start;
+    let current = start;
+    while (true) {
+      const candidate = path.join(current, ".context-tests.yml");
+      if (fs.existsSync(candidate)) {
+        resolved = candidate;
+        break;
+      }
+      if (current === boundary) return { kind: "none" };
+      const parent = path.dirname(current);
+      if (parent === current) return { kind: "none" };
+      current = parent;
+    }
+  }
 
   if (!fs.existsSync(resolved)) {
     if (!explicitPath) return { kind: "none" };
